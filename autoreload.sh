@@ -27,6 +27,8 @@ declare -gr issues="https://github.com/b0o/$prog/issues"
 declare -gr license="MIT"
 declare -gr license_url="https://mit-license.org"
 
+declare -gi tmux_autoreload_pid=-1
+
 function usage() {
   cat << EOF
 Usage: $prog [-f] [OPT...]
@@ -36,8 +38,9 @@ Watches your tmux configuration file and automatically reloads it on change.
 Options
   -h      Display usage information.
   -v      Display $prog version and copyright information.
-  -f      Run in foreground (do not fork)
+  -f      Run in foreground (do not fork).
   -k      Kill the running instance of $prog.
+  -s      Show status of $prog.
   -m MSG  Display MSG on all clients.
 
 To enable $prog, add the following line to the end of your tmux configuration
@@ -74,8 +77,16 @@ function display_message() {
   fi
 }
 
+function get_instance() {
+  tmux_autoreload_pid="$(tmux show-options -gv @tmux-autoreload-pid)"
+  if [[ "$tmux_autoreload_pid" -gt 0 ]] && ps "$tmux_autoreload_pid" &> /dev/null; then
+    return 0
+  fi
+  return 1
+}
+
 function main() {
-  if ! [[ "${1:-}" =~ ^-[hvfk]$ ]]; then
+  if ! [[ "${1:-}" =~ ^-[hvfks]$ ]]; then
     # Fork
     "$0" -f "$@" &> /dev/null &
     disown
@@ -84,7 +95,7 @@ function main() {
 
   local opt OPTARG
   local -i OPTIND
-  while getopts "hvfkm:" opt "$@"; do
+  while getopts "hvfksm:" opt "$@"; do
     case "$opt" in
     h)
       usage
@@ -96,12 +107,19 @@ function main() {
       ;;
     f) ;;
     k)
-      tmux_autoreload_pid="$(tmux show-options -gv @tmux-autoreload-pid)"
-      if [[ "$tmux_autoreload_pid" -gt 0 ]] && ps "$tmux_autoreload_pid" &> /dev/null; then
+      if get_instance; then
         kill "$tmux_autoreload_pid"
         return $?
       fi
       echo "$prog -k: kill failed: no instance found" >&2
+      return 1
+      ;;
+    s)
+      if get_instance; then
+        echo "running: $tmux_autoreload_pid"
+        return 0
+      fi
+      echo "not running"
       return 1
       ;;
     m)
@@ -115,11 +133,9 @@ function main() {
   done
   shift $((OPTIND - 1))
 
-  local -i tmux_autoreload_pid
   local -i entr_pid
 
-  tmux_autoreload_pid="$(tmux show-options -gv @tmux-autoreload-pid)"
-  if [[ "$tmux_autoreload_pid" -gt 0 ]] && ps "$tmux_autoreload_pid" &> /dev/null; then
+  if get_instance; then
     exit 0
   fi
 
