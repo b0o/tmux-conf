@@ -72,7 +72,7 @@ function display_message() {
     tmux display-message "$*"
   else
     while read -r client; do
-      echo tmux display-message -c "$client" "$*"
+      tmux display-message -c "$client" "$*"
     done < <(tmux list-clients -F '#{client_name}')
   fi
 }
