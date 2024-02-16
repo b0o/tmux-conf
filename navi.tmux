@@ -56,16 +56,23 @@ declare interval="0.5"
 declare path_expr="#{socket_path}-#{session_id}-#{pane_id}-$name"
 
 function tick() {
-  local data path
-  data="$(tmux list-panes -aF "$path_expr:#{pane_tty}")"
-  parallel <<<"$data" \
-    --colsep ':' \
-    --line-buffer \
-    "if ps -o state= -o comm= -t {2} | grep -iqE '^[^TXZ ]+ +(\\\\S+\\\\/)?$pattern$'; then
-      echo -n 1 >{1}
+  local panes procs
+  panes="$(tmux list-panes -aF "$path_expr:#{pane_tty}")"
+  procs="$(ps a -ostate=,tty=,comm=)"
+  while read -r pane; do
+    local path tty
+    path="${pane%%:*}"
+    tty="${pane#*:}"
+    tty="${tty#/dev/}"
+    if [[ -z "$tty" ]]; then
+      continue
+    fi
+    if grep -iqE "^[^TXZ ]+ ${tty} +(\S+/)?${pattern}\$" <<<"$procs"; then
+      echo -n 1 >"$path"
     else
-      echo -n 0 >{1}
-    fi"
+      echo -n 0 >"$path"
+    fi
+  done <<<"$panes"
 }
 
 function check() {
