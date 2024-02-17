@@ -78,8 +78,8 @@ function tick() {
     fi
     if [[ -z "${state["$pane_id"]:-}" || "${state["$pane_id"]}" -ne "$val" ]]; then
       state["$pane_id"]=$val
-      echo tmux set-option -p -t "$pane_id" "@navi-state" "$val"
-      tmux set-option -p -t "$pane_id" "@navi-state" "$val"
+      echo tmux set-option -pt "$pane_id" "@navi-state" "$val"
+      tmux set-option -pt "$pane_id" "@navi-state" "$val"
     fi
   done <<<"$panes"
 }
