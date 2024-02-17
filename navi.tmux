@@ -90,12 +90,6 @@ function loop() {
   done
 }
 
-function ensure_not_running() {
-  if get_instance &>/dev/null; then
-    return 1
-  fi
-}
-
 function main() {
   if ! [[ "${1:-}" =~ ^-[hfks]$ ]]; then
     if get_instance &>/dev/null; then
@@ -136,7 +130,9 @@ function main() {
     esac
   done
   shift $((OPTIND - 1))
-  ensure_not_running
+  if get_instance &>/dev/null; then
+    return 1
+  fi
   tmux set-option -g "@navi-pid" $$
   loop
   trap "onexit" EXIT
