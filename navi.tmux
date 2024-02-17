@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # navi.tmux: faster navigation between tmux and vim
-# Copyright 2021 Maddison Hellstrom <github.com/b0o>, MIT License.
+# Copyright 2024 Maddison Hellstrom <github.com/b0o>, MIT License.
 
 set -euo pipefail
 
