@@ -4,6 +4,7 @@
 
 set -euo pipefail
 
+# TODO: Support setting these using tmux options like @navi-interval, @navi-pattern
 declare pattern="g?(view|n?vim?x?|ssh)(diff)?"
 declare interval="0.5"
 
