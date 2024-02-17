@@ -34,10 +34,6 @@ function get_instance() {
   return 1
 }
 
-function onexit() {
-  tmux set-option -gu "@navi-pid" &
-}
-
 function kill_instance() {
   local -i instance_pid
   if instance_pid="$(get_instance)"; then
@@ -90,6 +86,10 @@ function loop() {
     tick
     sleep "$interval"
   done
+}
+
+function onexit() {
+  tmux set-option -gu "@navi-pid" &
 }
 
 function main() {
