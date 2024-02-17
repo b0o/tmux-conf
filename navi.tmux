@@ -1,24 +1,31 @@
 #!/usr/bin/env bash
-
-# Daemon that keeps track of the programs running in tmux panes,
-# and decides whether to swatch tmux panes or send keys for navigation within
-# the program running in the pane, like vim.
-#
-# Makes navigation much faster than checking the program running in the pane
-# at the time of navigation.
-#
+# navi.tmux: faster navigation between tmux and vim
 # Copyright 2021 Maddison Hellstrom <github.com/b0o>, MIT License.
 
 set -euo pipefail
 
-declare -g self prog name
-self="$(realpath -e "${BASH_SOURCE[0]}")"
-prog="$(basename "$self")"
-name="${prog%.tmux}"
+declare pattern="g?(view|n?vim?x?|ssh)(diff)?"
+declare interval="0.5"
+
+declare -A state=()
+
+function usage() {
+  cat <<EOF
+Usage: navi.tmux [-h] [-f] [-k] [-s] [-i interval] [-p pattern]
+
+Options:
+  -h        Show this help message
+  -f        Run in the foreground
+  -k        Kill the running instance
+  -s        Get the status of the running instance
+  -i        Set the interval in seconds (default: "0.5")
+  -p        Set the pattern to match (default: "$pattern")
+EOF
+}
 
 function get_instance() {
   local -i instance_pid
-  instance_pid="$(tmux show-options -gv "@$name-pid" 2>/dev/null)"
+  instance_pid="$(tmux show-options -gv "@navi-pid" 2>/dev/null)"
   if [[ "$instance_pid" -gt 0 ]] && ps "$instance_pid" &>/dev/null; then
     echo "$instance_pid"
     return 0
@@ -27,17 +34,17 @@ function get_instance() {
 }
 
 function onexit() {
-  tmux set-option -gu "@$name-pid" &
+  tmux set-option -gu "@navi-pid" &
 }
 
 function kill_instance() {
   local -i instance_pid
   if instance_pid="$(get_instance)"; then
     kill "$instance_pid"
-    echo "$name: killed $instance_pid"
+    echo "navi: killed $instance_pid"
     return 0
   fi
-  echo "$name: not running"
+  echo "navi: not running"
   return 1
 }
 
@@ -50,40 +57,30 @@ function get_status() {
   echo "not running"
   return 1
 }
-
-declare pattern="g?(view|n?vim?x?|ssh)(diff)?"
-declare interval="0.5"
-declare path_expr="#{socket_path}-#{session_id}-#{pane_id}-$name"
-
 function tick() {
   local panes procs
-  panes="$(tmux list-panes -aF "$path_expr:#{pane_tty}")"
+  panes="$(tmux list-panes -aF "#{pane_id}:#{pane_tty}")"
   procs="$(ps a -ostate=,tty=,comm=)"
   while read -r pane; do
-    local path tty
-    path="${pane%%:*}"
+    local pane_id tty
+    pane_id="${pane%%:*}"
     tty="${pane#*:}"
     tty="${tty#/dev/}"
     if [[ -z "$tty" ]]; then
       continue
     fi
+    local -i val
     if grep -iqE "^[^TXZ ]+ ${tty} +(\S+/)?${pattern}\$" <<<"$procs"; then
-      echo -n 1 >"$path"
+      val=1
     else
-      echo -n 0 >"$path"
+      val=0
+    fi
+    if [[ -z "${state["$pane_id"]:-}" || "${state["$pane_id"]}" -ne "$val" ]]; then
+      state["$pane_id"]=$val
+      echo tmux set-option -p -t "$pane_id" "@navi-state" "$val"
+      tmux set-option -p -t "$pane_id" "@navi-state" "$val"
     fi
   done <<<"$panes"
-}
-
-function check() {
-  local path="${1:-}"
-  if [[ -z "$path" ]]; then
-    path="$(tmux display-message -p "$path_expr")"
-  fi
-  if [[ -e "$path" && "$(cat "$path")" -eq 1 ]]; then
-    exit 0
-  fi
-  exit 1
 }
 
 function loop() {
@@ -100,24 +97,21 @@ function ensure_not_running() {
 }
 
 function main() {
-  if ! [[ "${1:-}" =~ ^-[cCfks]$ ]]; then
+  if ! [[ "${1:-}" =~ ^-[hfks]$ ]]; then
     if get_instance &>/dev/null; then
       exit 0
     fi
-    "$self" -f "$@" &>/dev/null &
+    "${BASH_SOURCE[0]}" -f "$@" &>/dev/null &
     disown
     exit 0
   fi
   local opt OPTARG
   local -i OPTIND
-  local path
-  while getopts ":cC:fksi:p:" opt "$@"; do
+  while getopts ":hfksi:p:" opt "$@"; do
     case "$opt" in
-    C)
-      check "$OPTARG"
-      ;;
-    c)
-      check
+    h)
+      usage
+      return
       ;;
     f)
       # Silently ignore -f
@@ -143,7 +137,7 @@ function main() {
   done
   shift $((OPTIND - 1))
   ensure_not_running
-  tmux set-option -g "@$name-pid" $$
+  tmux set-option -g "@navi-pid" $$
   loop
   trap "onexit" EXIT
 }
