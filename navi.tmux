@@ -57,6 +57,7 @@ function get_status() {
   echo "not running"
   return 1
 }
+
 function tick() {
   local panes procs
   panes="$(tmux list-panes -aF "#{pane_id}:#{pane_tty}")"
